@@ -1,0 +1,6 @@
+name = Custom Permission
+description = Allows creating custom permission keys
+core = 7.x
+package = Administration
+# Added automatically by builddrupalmodule script
+version = 1.0

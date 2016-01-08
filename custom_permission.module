@@ -1,0 +1,259 @@
+<?php
+/**
+ * @file: Allows creating custom permission keys
+*/
+
+/**
+ * Invoke hook_permission().
+ */
+function custom_permission_permission() {
+
+  $permissions = array(
+    'custom permissions manage' => array(
+      'title' => t('Manage custom permissions'),
+      'description' => t('Allows user to create custom permission keys'),
+    ),
+  );
+
+  $perms = custom_permission_load_all();
+
+  foreach ($perms as $k => $o) {
+    $permissions[$k] = array(
+      'title' => $o->title,
+      'description' => $o->description,
+    );
+  }
+
+  return $permissions;
+}
+
+/**
+ * Invoke hook_menu().
+ */
+function custom_permission_menu() {
+  $items['admin/people/permissions/custom'] = array(
+    'title' => 'Custom Permissions',
+    'description' => 'Manage custom permission keys',
+    'page callback' => 'custom_permission_list_permissions',
+    'access arguments' => array('custom permissions manage'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['admin/people/permissions/custom/add'] = array(
+    'title' => 'Add Custom Permission',
+    'description' => 'Add new custom permission',
+    'page callback' => 'custom_permission_form_wrapper',
+    'page arguments' => array('edit', FALSE),
+    'access arguments' => array('custom permissions manage'),
+  );
+
+  $items['admin/people/permissions/custom/%custom_permission/edit'] = array(
+    'title' => 'Edit Custom Permission',
+    'description' => 'Edit custom permission entry',
+    'page callback' => 'custom_permission_form_wrapper',
+    'page arguments' => array('edit', 4),
+    'access arguments' => array('custom permissions manage'),
+  );
+
+  $items['admin/people/permissions/custom/%custom_permission/delete'] = array(
+    'title' => 'Edit Custom Permission',
+    'description' => 'Edit custom permission entry',
+    'page callback' => 'custom_permission_form_wrapper',
+    'page arguments' => array('delete', 4),
+    'access arguments' => array('custom permissions manage'),
+  );
+
+  return $items;
+}
+
+/**
+ * Function custom_permission_list_permissions().
+ */
+function custom_permission_list_permissions() {
+
+  $options = array(
+    'query' => array(
+      'destination' => 'admin/people/permissions/custom',
+    ),
+  );
+
+  $build['links'] = array(
+    '#markup' => '<p>' . l(t('Add new'), 'admin/people/permissions/custom/add', $options) . '</p>',
+  );
+
+  $rows = array();
+  $query = db_select('custom_permission', 't')
+    ->fields('t')
+    ->orderBy('t.title');
+
+  $qh = $query->execute();
+  if ($qh && $rows = $qh->fetchAll(PDO::FETCH_ASSOC)) {
+    foreach ($rows as $k => $v) {
+      $rows[$k]['actions'] = array(
+        'data' => l(t('Edit'), 'admin/people/permissions/custom/' . $v['cpid'] . '/edit', $options) . ' '
+          . l(t('Delete'), 'admin/people/permissions/custom/' . $v['cpid'] . '/delete', $options),
+      );
+    }
+  }
+
+  $header = array(
+    'cpid' => t('Permission Key'),
+    'title' => t('Title'),
+    'description' => t('Description'),
+    'actions' => t('Actions'),
+  );
+
+  $build['custom_permission'] = array(
+    '#theme' => 'table',
+    '#rows' => $rows,
+    '#header' => $header,
+    '#empty' => t('No custom permissions defined yet'),
+  );
+
+  return $build;
+}
+
+/**
+ * Function custom_permission_load().
+ */
+function custom_permission_load($pid = FALSE) {
+  if (!$pid) return (object) array(
+    'cpid' => '',
+    'title' => '',
+    'description' => '',
+  );
+  return db_select('custom_permission', 'p')
+    ->fields('p')
+    ->condition('cpid', $pid)
+    ->execute()->fetchObject();
+}
+
+/**
+ * Function custom_permission_form_wrapper().
+ */
+function custom_permission_form_wrapper($mode, $perm) {
+  $f = 'custom_permission_' . $mode . '_form';
+  if (function_exists($f)) {
+    return drupal_get_form($f, $perm);
+  }
+  return drupal_not_found();
+}
+
+/**
+ * Function custom_permission_edit_form().
+ */
+function custom_permission_edit_form($form, $form_state, $perm) {
+
+  if (!$perm) $perm = custom_permission_load(FALSE);
+
+  $form['cpid'] = array(
+    '#title' => t('Permission key'),
+    '#type' => 'textfield',
+    '#size' => 40,
+    '#required' => TRUE,
+    '#default_value' => $perm->cpid,
+    '#description' => t('Permission key shall start with words "custom permission " - if not - this perfix will be enforced during save.'),
+    '#disabled' => $perm->cpid,
+  );
+
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#default_value' => $perm->title,
+    '#title' => t('Title'),
+    '#required' => TRUE,
+    '#size' => 30,
+  );
+
+  $form['description'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Description'),
+    '#default_value' => $perm->description,
+  );
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+  return $form;
+}
+
+/**
+ * Function custom_permission_edit_form_validate().
+ */
+function custom_permission_edit_form_validate($form, $form_state) {
+
+  $v = $form_state['values'];
+
+  if (!preg_match("/^[a-z0-9 \_]+$/", $v['cpid'])) {
+    form_set_error('cpid', t('Permission key shall contain only letters numbers space and undescores'));
+  }
+}
+/**
+ * Function custom_permission_edit_form_submit().
+ */
+function custom_permission_edit_form_submit($form, &$form_state) {
+  $v = $form_state['values'];
+  $v['cpid'] = 'custom permission ' . preg_replace("/^custom permission /", '', $v['cpid']);
+  if (db_merge('custom_permission')
+    ->key(array(
+      'cpid' => $v['cpid'],
+    ))
+    ->fields(array(
+      'title' => $v['title'],
+      'description' => $v['description'],
+    ))->execute()) {
+    drupal_set_message(t('Permissions successfully saved.'));
+    // Clear the user access cache.
+    drupal_static_reset('user_access');
+    drupal_static_reset('user_role_permissions');
+  }
+  else {
+    drupal_set_message(t('Failed to save permissions'), 'error');
+  }
+}
+
+/**
+ * Function custom_permission_delete_form().
+ */
+function custom_permission_delete_form($form, $form_state, $perm) {
+  return confirm_form($form, t('Are you sure to delete custom permission?'),
+    'admin/people/permission/custom',
+    $perm->title);
+}
+
+/**
+ * Function custom_permission_edit_form_submit().
+ */
+function custom_permission_delete_form_submit($form, $form_state) {
+  $v = $form_state['values'];
+  $perm = $form_state['build_info']['args'][0];
+  if (!$perm) return;
+  if ($v['op'] == t('Confirm')) {
+    if (db_delete('custom_permission')
+      ->condition('cpid', $perm->cpid)
+      ->execute()) {
+      drupal_set_message(t('Deleted successfully...'));
+      // Clear the user access cache.
+      drupal_static_reset('user_access');
+      drupal_static_reset('user_role_permissions');
+    }
+    else {
+      drupal_set_message(t('Faield to delete.'), 'error');
+    }
+  }
+}
+
+/**
+ * Function custom_permission_load_all().
+ */
+function custom_permission_load_all() {
+  $query = db_select('custom_permission', 'p')
+    ->fields('p');
+  $qh = $query->execute();
+  if (!$qh) return array();
+
+  $rez = array();
+  while ($o = $qh->fetchObject()) {
+    $rez[$o->cpid] = $o;
+  }
+  return $rez;
+}

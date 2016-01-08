@@ -1,0 +1,35 @@
+<?php
+
+/**
+ * Invoke hook_schema().
+ */
+function custom_permission_schema() {
+  $schema['custom_permission'] = array(
+    'description' => 'Custom permissions table',
+    'fields' => array(
+      'cpid' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Machine name of the permission',
+      ),
+      'title' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Human name for the permission',
+      ),
+      'description' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'Description of the permission key',
+      ),
+    ),
+    'primary key' => array('cpid'),
+  );
+  return $schema;
+}
